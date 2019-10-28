@@ -1,9 +1,14 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"os"
 	"strconv"
+)
+
+var (
+	ErrNoo = errors.New("NOOOOOOOOOOOOOOOOOO")
 )
 
 func execute() error {
@@ -30,6 +35,7 @@ func execute() error {
 
 	return nil
 }
+
 func main() {
 	err := execute()
 
