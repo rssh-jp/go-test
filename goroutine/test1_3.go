@@ -34,10 +34,10 @@ func execute(filepath string) error {
 	return nil
 }
 
-func Go(f func()error, ef func(error)){
-    go func(){
-        ef(f())
-    }()
+func Go(f func() error, ef func(error)) {
+	go func() {
+		ef(f())
+	}()
 }
 
 func main() {
@@ -70,10 +70,10 @@ func main() {
 	for _, item := range list {
 		sg.Add()
 
-        Go(func()error{
-            defer sg.Done()
-            return execute(item)
-        }, func(err error){
+		Go(func() error {
+			defer sg.Done()
+			return execute(item)
+		}, func(err error) {
 			if err != nil {
 				switch err.(type) {
 				case *os.PathError:
@@ -81,7 +81,7 @@ func main() {
 				default:
 				}
 			}
-        })
+		})
 	}
 
 	sg.Wait()
