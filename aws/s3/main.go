@@ -11,8 +11,9 @@ import(
 )
 
 const(
-    //filepath = "/extdisk1/tmp/giga1"
-    filepath = "/extdisk1/tmp/mega1"
+    //filepath = "/opt/rsrc/giga1"
+    filepath = "/opt/rsrc/mega1"
+    //filepath = "/opt/rsrc/byte100"
 )
 
 
@@ -31,20 +32,12 @@ func NewReadSeeker(fd *os.File)*ReadSeeker{
 }
 
 func (r *ReadSeeker)Read(p []byte)(n int, err error){
-    for{
-    }
-    r.bytes += len(p)
-
-    if r.bytes >= r.limit{
-    }
-
-    log.Println("###", r.count, len(p))
-    defer func(){
-        r.count += 1
-    }()
-    var index int
+    log.Println("IN", len(p))
     var retn int
-    for range time.Tick(time.Second){
+    var index int
+    for{
+        t := time.Now()
+
         size := r.limit
         if len(p[index:]) < r.limit{
             size = len(p[index:])
@@ -52,18 +45,31 @@ func (r *ReadSeeker)Read(p []byte)(n int, err error){
         if size == 0{
             break
         }
-        log.Println(size)
+
+        log.Println(index, size)
+
         b := p[index:index + size]
         n, err := r.file.Read(b)
         if err != nil{
-            return -1, err
+            log.Println("+++++++++++++++++++++++", n, err)
+            return retn, err
         }
+
+        index += size
 
         retn += n
 
-        index = index + size
+        if retn >= len(p){
+            break
+        }
+
+        diff := time.Second - time.Now().Sub(t)
+        if diff > 0{
+            time.Sleep(diff)
+        }
     }
 
+    log.Println("OUT", retn)
     return retn, nil
 }
 
@@ -124,7 +130,9 @@ func main(){
     }
 
     log.Println("+++++++++", 2)
-    svc := s3.New(sess, nil)
+    svc := s3.New(sess, &aws.Config{
+        Region: aws.String("ap-northeast-1"),
+    })
 
     log.Println("+++++++++", 3)
     fd, err := os.OpenFile(filepath, os.O_RDONLY, 0755)
