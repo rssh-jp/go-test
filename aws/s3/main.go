@@ -1,159 +1,158 @@
 package main
 
-import(
-    "log"
-    "os"
-    "time"
+import (
+	"log"
+	"os"
+	"time"
 
-    "github.com/aws/aws-sdk-go/aws"
-    "github.com/aws/aws-sdk-go/aws/session"
-    "github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-const(
-    //filepath = "/opt/rsrc/giga1"
-    filepath = "/opt/rsrc/mega1"
-    //filepath = "/opt/rsrc/byte100"
+const (
+	//filepath = "/extdisk1/tmp/giga1"
+	filepath = "/extdisk1/tmp/mega1"
+	//filepath = "/extdisk1/tmp/byte100"
 )
 
-
-type ReadSeeker struct{
-    file *os.File
-    limit int
-    count int
-    bytes int
+type ReadSeeker struct {
+	file     *os.File
+	limit    int
+	bytes    int
+	t        time.Time
+	duration time.Duration
+	count    int
 }
 
-func NewReadSeeker(fd *os.File)*ReadSeeker{
-    return &ReadSeeker{
-        file: fd,
-        limit: 10 * 1024,
-    }
+func NewReadSeeker(fd *os.File) *ReadSeeker {
+	return &ReadSeeker{
+		file:     fd,
+		limit:    100 * 1024,
+		t:        time.Now(),
+		duration: time.Second,
+	}
 }
 
-func (r *ReadSeeker)Read(p []byte)(n int, err error){
-    log.Println("IN", len(p))
-    var retn int
-    var index int
-    for{
-        t := time.Now()
+const (
+	taskCheck = iota + 1
+	taskExec
+	taskSleep
+	taskEnd
+)
 
-        size := r.limit
-        if len(p[index:]) < r.limit{
-            size = len(p[index:])
-        }
-        if size == 0{
-            break
-        }
+func (r *ReadSeeker) Read(p []byte) (n int, err error) {
+	if r.count < 7 {
+		return r.file.Read(p)
+	}
 
-        log.Println(index, size)
+	task := taskCheck
+	var index int
+	var retn int
+	for isLoop := true; isLoop; {
+		switch task {
+		case taskCheck:
+			if index >= len(p) {
+				task = taskEnd
+				break
+			}
 
-        b := p[index:index + size]
-        n, err := r.file.Read(b)
-        if err != nil{
-            log.Println("+++++++++++++++++++++++", n, err)
-            return retn, err
-        }
+			if r.bytes >= r.limit {
+				task = taskSleep
+			} else {
+				task = taskExec
+			}
+		case taskExec:
+			size := r.limit - r.bytes
+			if size > len(p[index:]) {
+				size = len(p[index:])
+			}
 
-        index += size
+			b := p[index : index+size]
 
-        retn += n
+			n, err = r.file.Read(b)
 
-        if retn >= len(p){
-            break
-        }
+			index += n
+			retn += n
+			r.bytes += n
 
-        diff := time.Second - time.Now().Sub(t)
-        if diff > 0{
-            time.Sleep(diff)
-        }
-    }
+			if err != nil {
+				task = taskEnd
+				break
+			}
 
-    log.Println("OUT", retn)
-    return retn, nil
+			task = taskCheck
+
+		case taskSleep:
+			diff := r.duration - time.Now().Sub(r.t)
+			if diff > 0 {
+				log.Println("SLEEP", diff, r.bytes)
+				time.Sleep(diff)
+			}
+
+			r.t = time.Now()
+
+			r.bytes -= r.limit
+
+			task = taskCheck
+		case taskEnd:
+			isLoop = false
+		}
+	}
+
+	return retn, err
 }
 
-func (r *ReadSeeker)Read2(p []byte)(n int, err error){
-    log.Println("###", r.count, len(p))
-    defer func(){
-        r.count += 1
-    }()
-    var index int
-    var retn int
-    for range time.Tick(time.Second){
-        size := r.limit
-        if len(p[index:]) < r.limit{
-            size = len(p[index:])
-        }
-        if size == 0{
-            break
-        }
-        log.Println(size)
-        b := p[index:index + size]
-        n, err := r.file.Read(b)
-        if err != nil{
-            return -1, err
-        }
-
-        retn += n
-
-        index = index + size
-    }
-
-    return retn, nil
+func (r *ReadSeeker) Seek(offset int64, whence int) (n int64, err error) {
+	r.count++
+	log.Println("SEEK", offset, whence)
+	return r.file.Seek(offset, whence)
 }
 
-func (r *ReadSeeker)Read3(p []byte)(n int, err error){
-    size := r.limit
-    if len(p) < r.limit{
-        size = len(p)
-    }
-    p = p[:size]
-    if len(p) > 0{
-        return r.file.Read(p)
-    }
-    return
+func measuretime(t time.Time) {
+	log.Println(time.Now().Sub(t))
 }
 
-func (r *ReadSeeker)Seek(offset int64, whence int)(n int64, err error){
-    return r.file.Seek(offset, whence)
-}
+func main() {
+	log.Println("START")
+	defer log.Println("END")
+	defer measuretime(time.Now())
 
-func main(){
-    log.Println("START")
-    defer log.Println("END")
+	log.Println("+++++++++", 1)
+	sess, err := session.NewSession()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    log.Println("+++++++++", 1)
-    sess, err := session.NewSession()
-    if err != nil{
-        log.Fatal(err)
-    }
+	log.Println("+++++++++", 2)
+	svc := s3.New(sess, &aws.Config{
+		Region: aws.String("ap-northeast-1"),
+	})
 
-    log.Println("+++++++++", 2)
-    svc := s3.New(sess, &aws.Config{
-        Region: aws.String("ap-northeast-1"),
-    })
+	log.Println("+++++++++", 3)
+	fd, err := os.OpenFile(filepath, os.O_RDONLY, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    log.Println("+++++++++", 3)
-    fd, err := os.OpenFile(filepath, os.O_RDONLY, 0755)
-    if err != nil{
-        log.Fatal(err)
-    }
+	log.Println("+++++++++", 4)
+	defer fd.Close()
 
-    log.Println("+++++++++", 4)
-    defer fd.Close()
+	r := NewReadSeeker(fd)
 
-    r := NewReadSeeker(fd)
-    
-    log.Println("+++++++++", 5)
-    res, err := svc.PutObject(&s3.PutObjectInput{
-        Body: r,
-        Bucket: aws.String("test-araumi"),
-        Key: aws.String("giga1"),
-    })
-    if err != nil{
-        log.Fatal(err)
-    }
+	log.Println("+++++++++", 5)
+	res, err := svc.PutObject(&s3.PutObjectInput{
+		Body: r,
+		//Body: fd,
+		Bucket: aws.String("test-araumi"),
+		Key:    aws.String("giga1"),
+		Metadata: map[string]*string{
+			"max_bandwidth": aws.String("10KB/S"),
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    log.Println("##################RES", res)
+	log.Println("##################RES", res)
 }
