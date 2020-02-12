@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+    "io"
 	"os"
 	"time"
     "net/http"
@@ -10,18 +11,43 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
-    //"github.com/rssh-jp/go-bandwidth"
+    "github.com/rssh-jp/go-bandwidth"
 )
 
 const (
-	filepath = "/extdisk1/tmp/giga1"
-	//filepath = "/extdisk1/tmp/mega1"
-	//filepath = "/extdisk1/tmp/byte100"
+	filepath = "/opt/rsrc/giga1"
+	//filepath = "/opt/rsrc/mega1"
+	//filepath = "/opt/rsrc/byte100"
 )
-
 
 func measuretime(t time.Time) {
 	log.Println(time.Now().Sub(t))
+}
+
+type MyTransport struct{
+    http.Transport
+}
+
+type ReadCloser struct{
+    *bandwidth.ReadWriter
+    io.Closer
+}
+
+func (r *ReadCloser)Read(p []byte)(int, error){
+    return r.ReadWriter.Read(p)
+}
+func (r *ReadCloser)Close()error{
+    return r.Closer.Close()
+}
+
+func (t *MyTransport)RoundTrip(req *http.Request)(*http.Response, error){
+    log.Println("++++++++++++++++++++++++")
+    log.Printf("%+v\n", req.Body)
+    req.Body = &ReadCloser{
+        ReadWriter: bandwidth.NewReader(req.Body, 10 * 1024 * 1024, time.Second),
+        Closer: req.Body,
+    }
+    return t.Transport.RoundTrip(req)
 }
 
 func main() {
@@ -33,9 +59,11 @@ func main() {
 	sess, err := session.NewSession(&aws.Config{
         Region: aws.String("ap-northeast-1"),
         HTTPClient: &http.Client{
-            Transport: &http.Transport{
-                ResponseHeaderTimeout: 1 * time.Second,
-                WriteBufferSize: 1024 * 1024,
+            Transport: &MyTransport{
+                Transport: http.Transport{
+                    ResponseHeaderTimeout: 1 * time.Second,
+                    WriteBufferSize: 1024 * 1024,
+                },
             },
         },
     })
