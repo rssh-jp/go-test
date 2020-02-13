@@ -109,7 +109,7 @@ func main() {
 
 	log.Println("+++++++++", 5)
 	res, err := s3Inst.PutObject(&s3.PutObjectInput{
-		Bucket: aws.String("test-araumi"),
+		Bucket: aws.String("test-rssh"),
 		Key:    aws.String("giga1"),
 		Body:   fd,
 	})
